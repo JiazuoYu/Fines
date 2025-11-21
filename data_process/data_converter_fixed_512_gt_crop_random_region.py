@@ -1,0 +1,354 @@
+import json
+from datasets import load_dataset, Dataset, DatasetDict
+import pandas as pd
+from PIL import Image
+import io
+import os
+import cv2
+import random
+import numpy as np
+from tqdm import tqdm
+from loguru import logger
+
+def draw_bbox(image, bbox, text, 
+              output_path, image_name, data_type,
+              color=(0, 0, 255), text_color=(0, 0, 255), 
+              thickness=4, font=cv2.FONT_HERSHEY_SIMPLEX,
+              font_scale=1, font_thickness=2):
+
+    
+    image = cv2.cvtColor(image, cv2.COLOR_RGB2BGR)
+    # for bbox in bboxes:
+    x_min, y_min, x_max, y_max = map(int, bbox)  # 确保坐标为整数
+    
+    # 计算文本尺寸
+    (text_width, text_height), baseline = cv2.getTextSize(text, font, font_scale, font_thickness)
+    # 计算文本绘制位置：默认在bbox上方，且居中于bbox水平中点
+    text_x = x_min + (x_max - x_min - text_width) // 2
+    text_y = y_min - 10  # 在bbox上方留10个像素的间隔
+
+    # 如果文本位置超出图像顶部，则将文本放到bbox内上方位置
+    if text_y - text_height - baseline < 0:
+        text_y = y_min + text_height + baseline + 10
+
+    # 绘制文本背景（可选），增强文本可读性
+    # 先绘制一个填充的矩形作为背景，再写文字
+    bg_x1 = text_x
+    bg_y1 = text_y - text_height - baseline
+    bg_x2 = text_x + text_width
+    bg_y2 = text_y + baseline
+    cv2.rectangle(image, (bg_x1, bg_y1), (bg_x2, bg_y2), (255, 255, 255), -1)  # 白色背景
+
+    # 绘制文本
+    cv2.putText(image, text, (text_x, text_y), font, font_scale, text_color, font_thickness)
+    cv2.rectangle(image, (x_min, y_min), (x_max, y_max), color, thickness)
+    
+    # 保存带框图像
+    image_name = image_name.split(".")[0]
+    output_path = os.path.join(output_path, image_name)
+    output_path = os.path.join(output_path, data_type)
+    os.makedirs(output_path, exist_ok=True)
+    
+    file_path = os.path.join(output_path, "ori_imag_with_crop_box.jpg")
+    cv2.imwrite(file_path, image)
+    logger.info(f"带框图像已保存至: {file_path}")
+    
+        
+def load_image_as_bytes(path, image_name, new_size):
+    # path = "/13390024681/yjz/All_Data_HD_Reasoning/MiniSeg_ft2_raw/all_images"
+    image_path = os.path.join(path, image_name)
+    if os.path.exists(image_path) and os.path.isfile(image_path):
+        try:
+            # with Image.open(image_path) as img:
+            image_np = cv2.imread(image_path)
+            img = Image.fromarray(cv2.cvtColor(image_np,cv2.COLOR_BGR2RGB))
+            img = img.resize(new_size)
+            return img
+        except Exception as e:
+            print(f"Error loading image {image_path}: {e}")
+            return None
+    else:
+        print("Path not exist:{}".format(image_path))
+        return None
+
+def get_solution_from_box(box):
+    x_min, y_min, x_max, y_max = map(int, box)
+    # 计算中心点
+    cx = (x_min + x_max) // 2
+    cy = (y_min + y_max) // 2
+
+    # 计算允许的最大偏移范围（box大小的1/10）
+    dx = (x_max - x_min) // 10
+    dy = (y_max - y_min) // 10
+
+    # 生成随机偏移，但确保偏移后仍在 box 内
+    px = min(max(cx + random.randint(-dx, dx), x_min), x_max)
+    py = min(max(cy + random.randint(-dy, dy), y_min), y_max)
+    
+    forms = "<box>({x_min},{y_min}),({x_max},{y_max})</box><points>({cx},{cy}),({px},{py})</points>"
+    
+    return forms.format(x_min=x_min, y_min=y_min, x_max=x_max, y_max=y_max, 
+                        cx=cx, cy=cy, px=px, py=py)
+
+def get_solution_from_box_ref_seg(box, res):
+    x_min, y_min, x_max, y_max = map(int, box)
+    # 计算中心点
+    cx = (x_min + x_max) // 2
+    cy = (y_min + y_max) // 2
+
+    # 计算允许的最大偏移范围（box大小的1/10）
+    dx = (x_max - x_min) // 10
+    dy = (y_max - y_min) // 10
+
+    # 生成随机偏移，但确保偏移后仍在 box 内
+    px = min(max(cx + random.randint(-dx, dx), x_min), x_max)
+    py = min(max(cy + random.randint(-dy, dy), y_min), y_max)
+    
+    forms = "<box>({x_min},{y_min}),({x_max},{y_max})</box><points>({cx},{cy}),({px},{py})</points><response>{res}</response>"
+    
+    return forms.format(x_min=x_min, y_min=y_min, x_max=x_max, y_max=y_max, 
+                        cx=cx, cy=cy, px=px, py=py, res=res)
+    
+def resize_bbox(bbox, original_size, new_size):
+    """
+    按照图像 resize 比例缩放 bbox。
+    
+    :param bbox: (x_min, y_min, x_max, y_max) 原始 bbox 坐标
+    :param original_size: (height, width) 原始图像尺寸
+    :param new_size: (new_height, new_width) 目标 resize 尺寸
+    :return: (x_min', y_min', x_max', y_max') 变换后的 bbox
+    """
+    orig_h, orig_w = original_size
+    new_h, new_w = new_size
+
+    scale_x = new_w / orig_w
+    scale_y = new_h / orig_h
+
+    scale = min(scale_y,scale_x)
+    nw = int(orig_w * scale)
+    nh = int(orig_h * scale)
+    dx = (new_w - nw) // 2
+    dy = (new_h - nh) // 2
+    
+    x_min, y_min, x_max, y_max = bbox
+    x_min = int(x_min * scale_x + dx)
+    y_min = int(y_min * scale_y + dy)
+    x_max = int(x_max * scale_x + dx)
+    y_max = int(y_max * scale_y + dy)
+
+    return (x_min, y_min, x_max, y_max)
+
+def get_mask_from_points(points, image_path):
+    
+    # img = cv2.cvtColor(np.asarray(image),cv2.COLOR_RGB2BGR)
+    img = cv2.imread(image_path)
+    # img = Image.fromarray(cv2.cvtColor(image_np,cv2.COLOR_BGR2RGB))
+    height, width = img.shape[:2]
+    label_value = 1  # target
+
+    mask = np.zeros((height, width), dtype=np.uint8)
+    cv2.polylines(mask, np.array([points], dtype=np.int32), True, label_value, 1)
+    cv2.fillPoly(mask, np.array([points], dtype=np.int32), label_value)
+    
+    return mask, height, width
+
+def get_bbox_from_mask(points, image, new_size, resize_box=False):
+    """
+    通过二值 mask 计算外接矩形框 (bbox)。
+    :param mask: 二值化 mask (numpy array)
+    :return: (x_min, y_min, x_max, y_max) - 外接矩形框坐标
+    """
+    mask, height, width = get_mask_from_points(points, image)
+    # logger.info("ori size:{}, new size:{}".format((height, width), new_size))
+    
+    # 找到 mask 中所有非零点的坐标
+    y_coords, x_coords = np.nonzero(mask)  
+    
+    x_min = x_coords.min()  
+    x_max = x_coords.max()  
+    y_min = y_coords.min()  
+    y_max = y_coords.max()
+    
+    # # Calculate scale factors
+    # scale_x = new_size[1] / width
+    # scale_y = new_size[0] / height
+    
+    # # Adjust the bounding box according to the scaling
+    # new_x_min = x_min * scale_x
+    # new_y_min = y_min * scale_y
+    # new_x_max = x_max * scale_x
+    # new_y_max = y_max * scale_y
+    
+    return (x_min, y_min, x_max, y_max)
+
+def get_id_from_name(name):
+    id = name.split(".")[0]
+    return id
+
+
+def save_in_chunks(dataset, chunk_size, save_path):
+    for i in range(0, len(dataset), chunk_size):
+        chunk = dataset.select(range(i, min(i + chunk_size, len(dataset))))
+        chunk.to_parquet(f"{save_path}/{i // chunk_size}.parquet")
+        # table = pa.Table.from_pandas(chunk.to_pandas())
+        # pq.write_table(table, f"{output_prefix}_part_{i // chunk_size}.parquet")
+
+
+def crop_image_around_gtbox(image_ori, gt_box, crop_size=512):
+    """
+    Args:
+        image_ori: 原图
+        gt_box: 原图上的GT框 [x_min, y_min, x_max, y_max]
+        crop_size: 裁剪图像大小（默认512）
+    
+    Returns:
+        cropped_img: 裁剪后的图像 (512x512 RGB)
+        new_gt_box: 映射到裁剪图中的新GT框坐标 [x_min, y_min, x_max, y_max]
+    """
+    img_h, img_w, _ = image_ori.shape
+
+    # 原始GT box坐标
+    x_min, y_min, x_max, y_max = gt_box
+    box_w = x_max - x_min
+    box_h = y_max - y_min
+
+    # 确保box比crop小
+    # assert box_w <= crop_size and box_h <= crop_size, "GT box 太大，不能被完整包含在裁剪图中"
+
+    # 在crop_size范围内，随机选择GT box的新位置
+    new_x_min = random.randint(0, max(0,crop_size - box_w, 0))
+    new_y_min = random.randint(0, max(crop_size - box_h,  0))
+    new_x_max = new_x_min + box_w
+    new_y_max = new_y_min + box_h
+
+    # 根据新旧坐标反推crop图左上角在原图的位置
+    crop_x_min = x_min - new_x_min
+    crop_y_min = y_min - new_y_min
+
+    # 限制crop区域不超出原图边界
+    crop_x_min = max(0, min(crop_x_min, img_w - crop_size))
+    crop_y_min = max(0, min(crop_y_min, img_h - crop_size))
+
+    crop_x_max = crop_x_min + crop_size
+    crop_y_max = crop_y_min + crop_size
+
+    # 裁剪图像
+    cropped_img = image_ori[crop_y_min:crop_y_max, crop_x_min:crop_x_max]
+
+    # 计算映射后的GT box
+    new_gt_box = [
+        x_min - crop_x_min,
+        y_min - crop_y_min,
+        x_max - crop_x_min,
+        y_max - crop_y_min
+    ]
+
+    return cropped_img, new_gt_box
+
+
+
+def json2parquet(json_path, save_path, split, num_limit, all_image_path, new_size, chunk_size, resize_box=False):
+    logger.info("resize image to:{}".format(new_size))
+    
+    with open(json_path, "r") as f:
+        data = json.load(f)
+    
+    anno = data["annotations"]
+    # anno = anno[:10]
+    train_data =[]
+    count = 0
+    # anno = anno[1577:1580]
+    for ann in tqdm(anno):
+        type = ann["Q-type"]
+        train_ann = {}
+        id = get_id_from_name(ann["image_path"])
+        problem = ann["Q"]
+        answer = ann["A"]
+        points = ann["points"]
+        
+
+        # image_data = load_image_as_bytes(all_image_path, ann["image_path"], new_size) # image open format
+        bbox = get_bbox_from_mask(ann["points"], 
+                                  os.path.join(all_image_path, ann["image_path"]), 
+                                  (new_size[1], new_size[0]),
+                                  resize_box)
+        
+        image_path = os.path.join(all_image_path, ann["image_path"])
+        image_np = cv2.imread(image_path)
+        image_ori = cv2.cvtColor(image_np, cv2.COLOR_BGR2RGB)
+
+        visual_path = '/15324359926/seg/HD_Reasoning/visual_path'
+
+        is_visual = 1  
+        if is_visual:
+            draw_bbox(image_ori, bbox, ann["Q"], visual_path, id, type)
+        visual_path = '/15324359926/seg/HD_Reasoning/visual_path2'
+        cropped_img, new_gt_box = crop_image_around_gtbox(image_ori, bbox, crop_size=512)
+        image_data = Image.fromarray(cropped_img)
+        if is_visual:
+            draw_bbox(cropped_img, new_gt_box, ann["Q"], visual_path, id, type)
+            
+        if type == "option":
+            
+            res = "{}".format(ann["A"])
+            options = ann["options"]
+        elif type == "referring":
+            res = "The object is found."
+        else:
+            res = "{}".format(ann["A"])
+        assert res, "res should not be empty!"
+            # print(res)
+        solution = get_solution_from_box_ref_seg(new_gt_box, res)
+        # print(solution)
+        if type == "option":
+            train_ann.update({"id":id, "problem":problem, "solution":solution, "answer":answer, "type":type, "image":image_data, "options": options})
+        else:
+            train_ann.update({"id":id, "problem":problem, "solution":solution, "answer":answer, "type":type, "image":image_data, "options": None})
+
+        train_data.append(train_ann)
+        count = count + 1
+        if num_limit is not None:
+            if count > num_limit:
+                break
+        # assert 1 == 2
+    ds = Dataset.from_list(train_data)
+    logger.info("Saved into {} chunks".format(chunk_size))
+    # ds.to_parquet(f"{save_path}/{split}.parquet") # split决定是分割训练集还是测试集
+    for i in range(0, len(ds), chunk_size):
+        chunk = ds.select(range(i, min(i + chunk_size, len(ds))))
+        chunk.to_parquet(f"{save_path}/{split}_{i // chunk_size}.parquet")
+
+    print(f"JSON 数据和图片已成功转换为 {save_path}")
+
+# def test_load(data_path):
+    
+#     data = load_dataset(data_path)["train"]
+#     print(data)
+    
+#     count = 0 
+#     for anno in data:
+#         print(anno.keys())
+#         print(anno["image"]) # <PIL.PngImagePlugin.PngImageFile image mode=RGB size=840x840 at 0x7F7786428650> size需要保持
+#         print(anno["id"])
+#         print(anno["problem"])
+#         print(anno["solution"])
+#         # print(anno["img_height"])
+#         # print(anno["img_width"])
+#         count = count + 1
+#         if count > 20 :
+#             break
+
+if __name__ == "__main__":
+    all_image_path = "/15324359926/seg/HD_Reasoning-main-yjz/All_final_data/all_images"
+
+    
+    data_path = "/15324359926/seg/HD_Reasoning-main-yjz/All_final_data/all_json/all_annotations_final_train_v5.json"
+    save_path = "/15324359926/seg/HD_Reasoning-main-yjz/All_final_data/all_parquet/converted_data_512gt_crop_box_qa_v1_before_revised_mask_random_region_final_version"
+    
+    # data_path = "/13390024681/yjz/All_Data_HD_Reasoning/MiniSeg/wrong_set.json"
+    # save_path = "/13390024681/yjz/All_Data_HD_Reasoning/MiniSeg/wrong_set"
+    
+    json2parquet(data_path, save_path, "train", None, all_image_path, (512, 512), 20, True)
+    
+    # test_load("/13390024681/yjz/All_Data_HD_Reasoning/MiniSeg/wrong_set") # 保存后即可通过文件夹路径访问
+    # test_load("/13390024681/yjz/refCOCOg_2k_840")
