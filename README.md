@@ -11,21 +11,18 @@ Code for paper "FineRS: Fine-grained Reasoning and Segmentation of Small Objects
 conda create -n finers python=3.10
 conda activate finers
 
+# Project requirements
+pip install -r requirements.txt
+
 # Install PyTorch (CUDA 11.8)
 pip install torch==2.5.1 torchvision==0.20.1 torchaudio==2.5.1     --index-url https://download.pytorch.org/whl/cu118
-
-# Core dependencies
-pip install bitsandbytes accelerate loguru
-pip install flash-attn --no-build-isolation   # may take long, or download from GitHub releases
 
 # xFormers
 pip install -U xformers==0.0.29     --index-url https://download.pytorch.org/whl/cu118
 
-# Additional packages
-pip install loguru pycocotools matplotlib sam2
-
-# Project requirements
-pip install -r requirements.txt
+# Core dependencies
+pip install bitsandbytes accelerate loguru pycocotools matplotlib sam2
+pip install flash-attn --no-build-isolation   # may take long, or download from GitHub releases
 
 # Editable install
 pip install -e .
