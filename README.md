@@ -4,8 +4,6 @@ Code for paper "FineRS: Fine-grained Reasoning and Segmentation of Small Objects
 
 ## 📊 Benchmark
 
-Our benchmark is now available on HuggingFace:
-
 👉 **[🔥 Our Benchmark on HuggingFace](https://huggingface.co/datasets/Jiazuo98/Finers-4k-benchmark/tree/main)**
 
 ![example image](imgs/emp2.png)
