@@ -8,6 +8,10 @@ Our benchmark is now available on HuggingFace:
 
 👉 **[🔥 Our Benchmark on HuggingFace](https://huggingface.co/datasets/Jiazuo98/Finers-4k-benchmark/tree/main)**
 
+![example image](imgs/emp2.png)
+
+![example image](imgs/emp.png)
+
 ------------------------------------------------------------------------
 
 ## 📦 Installation
