@@ -116,6 +116,9 @@ python3 training_scripts/model_merger.py     --local_dir workdir/xxx/global_step
 bash eval.sh
 ```
 
+## 🔥 Our Pretrained Models for Inference
+https://huggingface.co/mycfhs/FineRS/tree/main
+
 ------------------------------------------------------------------------
 ## Acknowledgement
  - Our repo is built on [Seg-Zero](https://github.com/dvlab-research/Seg-Zero), [EasyR1](https://github.com/dvlab-research/Seg-Zero?tab=readme-ov-file) and [veRL](https://github.com/volcengine/verl). We thank the authors for sharing their codes.
