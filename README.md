@@ -58,25 +58,31 @@ git clone https://huggingface.co/Qwen/Qwen2.5-VL-7B-Instruct
 
 ## ▶️ Run
 
-### 1️⃣ HR Data Processing
+### 1️⃣ LR Data Processing 
+``` bash
+python data_process/data_converter_fixed_512_gt_crop_random_region.py
+```
+
+
+
+------------------------------------------------------------------------
+
+### 2️⃣ LR Training
+
+``` bash
+bash training_scripts/final_lr_training.sh
+```
+
+------------------------------------------------------------------------
+
+### 3️⃣ HR Data Processing (Two Methods)
+#### **3.1 Faster Method**
 
 ``` bash
 python data_process/data_converter_fixed_1920_qa.py
 ```
 
-------------------------------------------------------------------------
-
-### 2️⃣ HR Training
-
-``` bash
-bash training_scripts/final_hr_training.sh
-```
-
-------------------------------------------------------------------------
-
-### 3️⃣ LR Data Processing (Two Methods)
-
-#### **3.1 Paper Method (Search-Based)**
+#### **3.2 Paper Method (Search-Based)**
 
 ``` bash
 # Step 1: region search based on LR model
@@ -86,19 +92,15 @@ bash data_process/data_convert_1920_with_best_region_by_LR_model.sh
 python data_process/data_converter_fixed_1920_qa_with_best_region.py
 ```
 
-#### **3.2 Random Region Method**
-
-``` bash
-python data_process/data_converter_fixed_512_gt_crop_random_region.py
-```
 
 ------------------------------------------------------------------------
 
-### 4️⃣ LR Training
+### 4️⃣ HR Training
 
 ``` bash
-bash training_scripts/final_lr_training.sh
+bash training_scripts/final_hr_training.sh
 ```
+
 
 ------------------------------------------------------------------------
 
