@@ -58,12 +58,11 @@ git clone https://huggingface.co/Qwen/Qwen2.5-VL-7B-Instruct
 
 ## ▶️ Run
 
-### 1️⃣ LR Data Processing 
+### 1️⃣ LR Data Processing
+
 ``` bash
 python data_process/data_converter_fixed_512_gt_crop_random_region.py
 ```
-
-
 
 ------------------------------------------------------------------------
 
@@ -76,6 +75,7 @@ bash training_scripts/final_lr_training.sh
 ------------------------------------------------------------------------
 
 ### 3️⃣ HR Data Processing (Two Methods)
+
 #### **3.1 Faster Method**
 
 ``` bash
@@ -92,15 +92,17 @@ bash data_process/data_convert_1920_with_best_region_by_LR_model.sh
 python data_process/data_converter_fixed_1920_qa_with_best_region.py
 ```
 
-
 ------------------------------------------------------------------------
 
 ### 4️⃣ HR Training
 
 ``` bash
-bash training_scripts/final_hr_training.sh
-```
+bash training_scripts/final_hr_training.sh 
 
+# or for 3.1 faster data processing
+bash training_scripts/final_hr_training_faster.sh 
+
+```
 
 ------------------------------------------------------------------------
 
@@ -119,9 +121,11 @@ bash eval.sh
 ```
 
 ## 🔥 Our Pretrained Models for Inference
+
 https://huggingface.co/mycfhs/FineRS/tree/main
 
 ------------------------------------------------------------------------
 ## Acknowledgement
+
  - Our repo is built on [Seg-Zero](https://github.com/dvlab-research/Seg-Zero), [EasyR1](https://github.com/dvlab-research/Seg-Zero?tab=readme-ov-file) and [veRL](https://github.com/volcengine/verl). We thank the authors for sharing their codes.
  - This work utilizes models from  [Qwen2.5-VL](https://huggingface.co/Qwen/Qwen2.5-VL-3B-Instruct) and [SAM2](https://huggingface.co/facebook/sam2-hiera-large). 

@@ -17,7 +17,14 @@ import torch
 from transformers import PreTrainedTokenizer
 
 from verl import DataProto
-from verl.utils.reward_score import math_compute_score, r1v_compute_score, seg_compute_score, seg_strict_compute_score_qa, seg_strict_compute_score8_region_qa
+from verl.utils.reward_score import (
+    math_compute_score,
+    r1v_compute_score,
+    seg_compute_score,
+    seg_strict_compute_score_qa,
+    seg_strict_compute_score8_region_qa,
+    seg_strict_compute_score8_region_qa_faster,
+)
 
 
 class CustomRewardManager:
@@ -34,6 +41,8 @@ class CustomRewardManager:
             self.compute_score = seg_strict_compute_score_qa
         elif compute_score == "seg_restrict8_regions_and_qa":
             self.compute_score = seg_strict_compute_score8_region_qa
+        elif compute_score == "seg_restrict8_regions_and_qa_faster":
+            self.compute_score = seg_strict_compute_score8_region_qa_faster
 
         else:
             raise NotImplementedError()
@@ -65,7 +74,7 @@ class CustomRewardManager:
             # print(ground_truth,response_str)
 
             score = self.compute_score(response_str, ground_truth)
-            
+
             # ! hr 的需要解包 两个返回值
             if type(score) == tuple and len(score) == 2:
                 score, scores = score

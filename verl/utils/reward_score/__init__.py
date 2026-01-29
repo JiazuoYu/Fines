@@ -22,6 +22,15 @@ from .seg_restrict_qa import seg_strict_compute_score_qa
 
 # hr
 from .seg_restrict8_regions_and_qa import seg_strict_compute_score8_region_qa
+from .seg_restrict8_regions_and_qa_faster import (
+    seg_strict_compute_score8_region_qa_faster,
+)
 
-__all__ = ["math_compute_score", "r1v_compute_score", "seg_compute_score", 
-           "seg_strict_compute_score_qa", "seg_strict_compute_score8_region_qa"]
+__all__ = [
+    "math_compute_score",
+    "r1v_compute_score",
+    "seg_compute_score",
+    "seg_strict_compute_score_qa",
+    "seg_strict_compute_score8_region_qa",
+    "seg_strict_compute_score8_region_qa_faster",
+]
